@@ -43,8 +43,8 @@ body { font-family: sans-serif; margin:0; height:100vh; display:flex; justify-co
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   // --- 設定: 実運用ではこれらを直接コミットしないでください（ビルド時に差し替え or 環境変数を使用） ---
-  const SUPABASE_URL = "https://<your-supabase-project>.supabase.co";
-  const SUPABASE_ANON_KEY = "<REPLACE_WITH_ANON_KEY>";
+const SUPABASE_URL = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eHRkcHZ4b3psc3Z2cWt0bXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNjEyMDIsImV4cCI6MjA3MDgzNzIwMn0.t6E4KU0WrZuavyRqzMdw6N2yWt_whIed-W7nRzl2cnE";
   // --------------------------------------------------------------------------------------------
 
   const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
