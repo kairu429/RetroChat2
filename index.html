@@ -42,11 +42,9 @@ body { font-family: sans-serif; margin:0; height:100vh; display:flex; justify-co
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-  // --- 設定: 実運用ではこれらを直接コミットしないでください（ビルド時に差し替え or 環境変数を使用） ---
-const SUPABASE_URL = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eHRkcHZ4b3psc3Z2cWt0bXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNjEyMDIsImV4cCI6MjA3MDgzNzIwMn0.t6E4KU0WrZuavyRqzMdw6N2yWt_whIed-W7nRzl2cnE";
-  // --------------------------------------------------------------------------------------------
-
+  // Supabase設定
+  const SUPABASE_URL = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3eHRkcHZ4b3psc3Z2cWt0bXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNjEyMDIsImV4cCI6MjA3MDgzNzIwMn0.t6E4KU0WrZuavyRqzMdw6N2yWt_whIed-W7nRzl2cnE";
   const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const loginDiv = document.getElementById("login");
@@ -67,7 +65,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     const time = created_at ? new Date(created_at).toLocaleTimeString() : '';
     meta.textContent = `${u} ${time}`;
     const body = document.createElement('div');
-    body.textContent = content; // textContent で XSS 防止
+    body.textContent = content;
     wrapper.appendChild(meta);
     wrapper.appendChild(body);
     chatDiv.appendChild(wrapper);
@@ -89,33 +87,11 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     }
   }
 
-  let realtimeSubscription = null;
   function subscribeToRealtime() {
-    if (typeof supabase.channel === 'function') {
-      try {
-        realtimeSubscription = supabase
-          .channel('public:Chat')
-          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Chat' }, (payload) => {
-            appendMessage(payload.new);
-          })
-          .subscribe();
-      } catch (err) {
-        console.error('Realtime subscribe (v2) failed', err);
-      }
-    } else if (typeof supabase.from === 'function') {
-      try {
-        realtimeSubscription = supabase
-          .from('Chat')
-          .on('INSERT', payload => {
-            appendMessage(payload.new);
-          })
-          .subscribe();
-      } catch (err) {
-        console.error('Realtime subscribe (v1) failed', err);
-      }
-    } else {
-      console.warn('Realtime not supported by this supabase client version');
-    }
+    supabase
+      .from('Chat')
+      .on('INSERT', payload => appendMessage(payload.new))
+      .subscribe();
   }
 
   async function sendMessage() {
@@ -131,24 +107,17 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     }
   }
 
-  // 追加: 送信ボタンの状態を一元管理する関数
   function updateSendButtonState() {
-    // 有効にする条件: ログイン済みかつ入力が空でない
     const hasText = msgInput.value.trim() !== "";
     const loggedIn = !!username;
     sendBtn.disabled = !(hasText && loggedIn);
   }
 
-  // イベント登録: input系イベントで必ず状態を更新（自動入力や貼り付けにも対応）
   ['input', 'change', 'keyup', 'paste'].forEach(evt => {
     msgInput.addEventListener(evt, updateSendButtonState);
   });
 
-  // クリックで送信
-  sendBtn.addEventListener('click', () => {
-    if (!username) return alert("まず名前を入力してください");
-    sendMessage();
-  });
+  sendBtn.addEventListener('click', sendMessage);
 
   enterBtn.addEventListener('click', async () => {
     username = usernameInput.value.trim();
@@ -159,40 +128,26 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     loginDiv.style.display = "none";
     chatroomDiv.style.display = "flex";
 
-    try {
-      await supabase.from('Chat').insert([{ username, content: `${username}さんが入室しました` }]);
-    } catch (err) {
-      console.error('Failed to insert join message', err);
-    }
-
-    await loadHistory(200);
+    await supabase.from('Chat').insert([{ username, content: `${username}さんが入室しました` }]);
+    await loadHistory();
     subscribeToRealtime();
-
     msgInput.focus();
-
-    // 入室後にボタン状態を更新（username が設定されたため）
     updateSendButtonState();
   });
 
   msgInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!username) return alert("まず名前を入力してください");
       sendMessage();
     }
   });
 
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', async () => {
     if (!username) return;
     try {
-      supabase.from('Chat').insert([{ username, content: `${username}さんが退室しました` }]);
-    } catch (err) {
-      // ベストエフォート
-    }
+      await supabase.from('Chat').insert([{ username, content: `${username}さんが退室しました` }]);
+    } catch (err) {}
   });
-
-  // 初期状態のボタン有効化チェック（自動入力に対応）
-  updateSendButtonState();
 
   if (username) {
     usernameInput.value = username;
