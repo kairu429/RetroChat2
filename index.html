@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>RetroChat</title>
+<style>
+body { font-family: sans-serif; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background:#f6f6f6; }
+#login, #chatroom { display:none; flex-direction:column; width:80vw; max-width:600px; height:80vh; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,0.08); padding:16px; border-radius:8px; }
+#login { align-items:center; justify-content:center; }
+#chatroom { display:flex; flex-direction:column; }
+#chat { flex:1; border:1px solid #eee; padding:8px; overflow-y:auto; margin-bottom:8px; background:#fafafa; border-radius:6px; }
+.message { margin:6px 0; padding:6px 8px; border-radius:6px; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
+.meta { font-size:0.8em; color:#666; margin-bottom:4px; }
+#msgInput { flex:1; padding:10px; font-size:1em; border:1px solid #ddd; border-radius:6px; }
+#sendBtn { padding:10px 16px; font-size:1em; margin-left:8px; border-radius:6px; border:none; background:#007bff; color:#fff; cursor:pointer; }
+#sendBtn:disabled { background:#9ec0ff; cursor:not-allowed; }
+.inputContainer { display:flex; align-items:center; gap:8px; }
+.small { font-size:0.9em; color:#444; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
+
+<div id="login">
+  <div style="text-align:center;">
+    <h2>名前を入力してください</h2>
+    <input id="usernameInput" placeholder="名前" />
+    <div style="margin-top:8px;">
+      <button id="enterBtn">次へ</button>
+    </div>
+    <p class="small">（注意: 本番では公開キーのみを使用し、秘密キーはサーバー側で管理してください）</p>
+  </div>
+</div>
+
+<div id="chatroom">
+  <div id="chat" aria-live="polite"></div>
+  <div class="inputContainer">
+    <input id="msgInput" placeholder="メッセージを入力" />
+    <button id="sendBtn" disabled type="button">送信</button>
+  </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  // --- 設定: 実運用ではこれらを直接コミットしないでください（ビルド時に差し替え or 環境変数を使用） ---
+  const SUPABASE_URL = "https://<your-supabase-project>.supabase.co";
+  const SUPABASE_ANON_KEY = "<REPLACE_WITH_ANON_KEY>";
+  // --------------------------------------------------------------------------------------------
+
+  const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const loginDiv = document.getElementById("login");
+  const chatroomDiv = document.getElementById("chatroom");
+  const chatDiv = document.getElementById("chat");
+  const enterBtn = document.getElementById("enterBtn");
+  const sendBtn = document.getElementById("sendBtn");
+  const msgInput = document.getElementById("msgInput");
+  const usernameInput = document.getElementById("usernameInput");
+
+  let username = localStorage.getItem("retrochat_username") || "";
+
+  function appendMessage({ username: u, content, created_at }) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const time = created_at ? new Date(created_at).toLocaleTimeString() : '';
+    meta.textContent = `${u} ${time}`;
+    const body = document.createElement('div');
+    body.textContent = content; // textContent で XSS 防止
+    wrapper.appendChild(meta);
+    wrapper.appendChild(body);
+    chatDiv.appendChild(wrapper);
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+  }
+
+  async function loadHistory(limit = 200) {
+    try {
+      const { data, error } = await supabase
+        .from('Chat')
+        .select('id, username, content, created_at')
+        .order('id', { ascending: true })
+        .limit(limit);
+      if (error) throw error;
+      chatDiv.innerHTML = '';
+      data.forEach(appendMessage);
+    } catch (err) {
+      console.error('Failed to load history', err);
+    }
+  }
+
+  let realtimeSubscription = null;
+  function subscribeToRealtime() {
+    if (typeof supabase.channel === 'function') {
+      try {
+        realtimeSubscription = supabase
+          .channel('public:Chat')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'Chat' }, (payload) => {
+            appendMessage(payload.new);
+          })
+          .subscribe();
+      } catch (err) {
+        console.error('Realtime subscribe (v2) failed', err);
+      }
+    } else if (typeof supabase.from === 'function') {
+      try {
+        realtimeSubscription = supabase
+          .from('Chat')
+          .on('INSERT', payload => {
+            appendMessage(payload.new);
+          })
+          .subscribe();
+      } catch (err) {
+        console.error('Realtime subscribe (v1) failed', err);
+      }
+    } else {
+      console.warn('Realtime not supported by this supabase client version');
+    }
+  }
+
+  async function sendMessage() {
+    const text = msgInput.value.trim();
+    if (!text) return;
+    try {
+      await supabase.from('Chat').insert([{ username, content: text }]);
+      msgInput.value = "";
+      updateSendButtonState();
+    } catch (err) {
+      console.error('Failed to send message', err);
+      alert('メッセージ送信に失敗しました');
+    }
+  }
+
+  // 追加: 送信ボタンの状態を一元管理する関数
+  function updateSendButtonState() {
+    // 有効にする条件: ログイン済みかつ入力が空でない
+    const hasText = msgInput.value.trim() !== "";
+    const loggedIn = !!username;
+    sendBtn.disabled = !(hasText && loggedIn);
+  }
+
+  // イベント登録: input系イベントで必ず状態を更新（自動入力や貼り付けにも対応）
+  ['input', 'change', 'keyup', 'paste'].forEach(evt => {
+    msgInput.addEventListener(evt, updateSendButtonState);
+  });
+
+  // クリックで送信
+  sendBtn.addEventListener('click', () => {
+    if (!username) return alert("まず名前を入力してください");
+    sendMessage();
+  });
+
+  enterBtn.addEventListener('click', async () => {
+    username = usernameInput.value.trim();
+    if (!username) return alert("名前を入力してください");
+
+    localStorage.setItem("retrochat_username", username);
+
+    loginDiv.style.display = "none";
+    chatroomDiv.style.display = "flex";
+
+    try {
+      await supabase.from('Chat').insert([{ username, content: `${username}さんが入室しました` }]);
+    } catch (err) {
+      console.error('Failed to insert join message', err);
+    }
+
+    await loadHistory(200);
+    subscribeToRealtime();
+
+    msgInput.focus();
+
+    // 入室後にボタン状態を更新（username が設定されたため）
+    updateSendButtonState();
+  });
+
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!username) return alert("まず名前を入力してください");
+      sendMessage();
+    }
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (!username) return;
+    try {
+      supabase.from('Chat').insert([{ username, content: `${username}さんが退室しました` }]);
+    } catch (err) {
+      // ベストエフォート
+    }
+  });
+
+  // 初期状態のボタン有効化チェック（自動入力に対応）
+  updateSendButtonState();
+
+  if (username) {
+    usernameInput.value = username;
+    enterBtn.click();
+  } else {
+    loginDiv.style.display = "flex";
+  }
+});
+</script>
+
+</body>
+</html>
