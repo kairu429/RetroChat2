@@ -6,23 +6,29 @@
   <style>
     body { font-family: sans-serif; max-width: 600px; margin: 30px auto; }
     #chat { border:1px solid #ccc; padding:10px; height:400px; overflow-y:scroll; margin-bottom:10px; }
-    input { width:80%; padding:5px; }
+    input { width:80%; padding:5px; margin-bottom:5px; }
     button { padding:5px 10px; }
     .message { margin-bottom:5px; }
   </style>
-  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 <body>
 
   <h1>RetroChat</h1>
-  <div id="chat"></div>
-  <input id="msg" placeholder="メッセージを入力" />
-  <button onclick="sendMessage()">送信</button>
+
+  <!-- ユーザー名入力 -->
+  <div id="nameBox">
+    <input id="usernameInput" placeholder="名前を入力" />
+    <button onclick="setName()">決定</button>
+  </div>
+
+  <!-- チャット表示 -->
+  <div id="chat" style="display:none;"></div>
+  <input id="msg" placeholder="メッセージを入力" style="display:none;" />
+  <button onclick="sendMessage()" style="display:none;">送信</button>
 
   <script>
-    // Firebase 初期化
     const firebaseConfig = {
       apiKey: "AIzaSyD8ANZ8PyFIT2NRfPS_JDFV-2zZqzkxIsk",
       authDomain: "retrochat-74f95.firebaseapp.com",
@@ -37,22 +43,34 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // メッセージ送信
-    function sendMessage() {
-      const text = document.getElementById('msg').value.trim();
-      if(text === '') return;
-      db.ref('chat/').push({ text, time: Date.now() });
-      document.getElementById('msg').value = '';
+    let username = "";
+
+    function setName() {
+      const input = document.getElementById('usernameInput');
+      const name = input.value.trim();
+      if(name === "") { alert("名前を入力してください"); return; }
+      username = name;
+      document.getElementById('nameBox').style.display = "none";
+      document.getElementById('chat').style.display = "block";
+      document.getElementById('msg').style.display = "inline-block";
+      document.querySelector('button[onclick="sendMessage()"]').style.display = "inline-block";
     }
 
-    // メッセージ受信（リアルタイム）
+    function sendMessage() {
+      const textInput = document.getElementById('msg');
+      const text = textInput.value.trim();
+      if(!text) return;
+      db.ref('chat/').push({ name: username, text: text, time: Date.now() });
+      textInput.value = '';
+    }
+
     const chatDiv = document.getElementById('chat');
     db.ref('chat/').on('child_added', snapshot => {
       const msg = snapshot.val();
       const div = document.createElement('div');
       div.className = 'message';
       const time = new Date(msg.time).toLocaleTimeString();
-      div.textContent = `[${time}] ${msg.text}`;
+      div.textContent = `[${time}] ${msg.name}: ${msg.text}`;
       chatDiv.appendChild(div);
       div.scrollIntoView();
     });
