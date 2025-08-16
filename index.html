@@ -6,11 +6,11 @@
 <style>
 body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
 #chatroom { display:flex; flex-direction:column; width:80vw; max-width:600px; height:80vh; border:1px solid limegreen; position:relative;}
-#chat { flex:1; border:1px solid limegreen; padding:5px; overflow-y:auto; background-color:black;}
-input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1;}
-button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer;}
+#chat { flex:1; border:1px solid limegreen; padding:5px; overflow-y:auto; background-color:black; margin-bottom:50px;}
+.inputContainer { display:flex; margin-top:5px; }
+input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1; }
+button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer; }
 button:hover { background:#111;}
-.inputContainer { display:flex; margin-top:5px;}
 .chatImage { max-width:200px; max-height:150px; border:2px solid limegreen; margin:5px 0; display:block; image-rendering: pixelated; transition: transform 0.2s;}
 .chatImage:hover { transform:scale(1.1);}
 #userList { position:absolute; bottom:5px; right:5px; border:1px solid limegreen; padding:5px; max-height:150px; overflow-y:auto; background:black; font-size:0.8em;}
@@ -24,14 +24,17 @@ button:hover { background:#111;}
 <body>
 <div id="chatroom" style="display:none;">
   <div id="chat"></div>
+
   <div class="inputContainer">
     <input id="msgInput" placeholder="メッセージまたは画像URLを入力" />
     <button id="sendBtn">送信</button>
   </div>
-  <div class="inputContainer">
+
+  <div class="inputContainer" style="margin-top:0;">
     <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
-    <button id="setNameBtn">OK</button>
+    <button id="setNameBtn">決定</button>
   </div>
+
   <div id="userList"></div>
 </div>
 
@@ -50,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let username = "匿名";
   let roomID = null;
   let userKey = null;
+  let isWorld = false;
 
   const menu = document.getElementById("menu");
   const chatroom = document.getElementById("chatroom");
@@ -62,6 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function joinRoom(rid){
     roomID = rid;
+    isWorld = (rid==="world");
     menu.style.display="none";
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
@@ -70,7 +75,6 @@ document.addEventListener("DOMContentLoaded", () => {
     userKey = roomRef.child("users").push().key;
     roomRef.child("users/"+userKey).set(username);
 
-    // ブラウザ閉じた時に自動削除
     window.addEventListener("beforeunload", ()=>{
       roomRef.child("users/"+userKey).remove();
     });
@@ -96,17 +100,20 @@ document.addEventListener("DOMContentLoaded", () => {
       userListDiv.innerHTML="";
       snapshot.forEach(s=>{
         const p = document.createElement("div");
-        p.textContent = s.val() + (s.key===userKey?" owner":"");
+        if(!isWorld && s.key===userKey){
+          p.textContent = s.val()+" owner";
+        } else {
+          p.textContent = s.val();
+        }
         userListDiv.appendChild(p);
       });
-      // ルームが空になったら削除
-      if(!snapshot.exists()){
+      // ルーム内が空になったら削除
+      if(!snapshot.exists() && !isWorld){
         roomRef.remove();
       }
     });
   }
 
-  // メッセージ送信
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
@@ -120,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.key==="Enter") sendMessage();
   });
 
-  // 名前設定
   setNameBtn.addEventListener("click", ()=>{
     const inputName = usernameInput.value.trim();
     if(inputName){
@@ -131,11 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // メニュー操作
-  document.getElementById("worldBtn").addEventListener("click", ()=>{
-    joinRoom("world");
-  });
-
+  document.getElementById("worldBtn").addEventListener("click", ()=> joinRoom("world"));
   document.getElementById("joinBtn").addEventListener("click", ()=>{
     let code = prompt("招待コードを入力");
     if(code) joinRoom(code);
