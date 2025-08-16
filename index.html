@@ -11,21 +11,19 @@ body {
   display:flex; 
   justify-content:center; 
   align-items:center; 
-  background-color: black;   /* 背景黒 */
-  color: limegreen;          /* 文字緑 */
+  background-color: black; 
+  color: limegreen;
 }
-#login, #chatroom { 
-  display:none; 
+#chatroom { 
+  display:flex; 
   flex-direction:column; 
   width:80vw; 
   max-width:600px; 
   height:80vh; 
 }
-#login { align-items:center; justify-content:center; }
-#chatroom { display:flex; flex-direction:column; }
 #chat { 
   flex:1; 
-  border:1px solid limegreen;  /* 枠も緑 */
+  border:1px solid limegreen; 
   padding:5px; 
   overflow-y:auto; 
   margin-bottom:5px; 
@@ -33,83 +31,70 @@ body {
 input {
   padding:10px; 
   font-size:1em; 
-  background:black;         /* 入力欄黒 */
-  color:limegreen;          /* 入力文字緑 */
+  background:black; 
+  color:limegreen; 
   border:1px solid limegreen;
 }
 input::placeholder {
   color: limegreen;
   opacity: 0.7;
 }
-#sendBtn, #enterBtn { 
+button { 
   padding:10px 20px; 
   font-size:1em; 
-  margin-top:10px; 
-  background:black;         /* ボタン黒 */
-  color:limegreen;          /* ボタン文字緑 */
-  border:1px solid white;   /* ボタン枠白 */
+  margin-left:5px; 
+  background:black; 
+  color:limegreen; 
+  border:1px solid white; 
   cursor:pointer;
 }
-#sendBtn:hover, #enterBtn:hover {
-  background:#111;          /* ホバー時ちょっと明るい黒 */
+button:hover {
+  background:#111;
 }
-.inputContainer { display:flex; }
+.inputContainer { display:flex; margin-bottom:10px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
 
-<!-- 名前入力画面 -->
-<div id="login">
-  <h2>名前を入力してください</h2>
-  <input id="usernameInput" placeholder="名前" />
-  <button id="enterBtn">次へ</button>
-</div>
-
 <!-- チャット画面 -->
 <div id="chatroom">
   <div id="chat"></div>
+
+  <!-- メッセージ入力欄 -->
   <div class="inputContainer">
     <input id="msgInput" placeholder="メッセージを入力" />
     <button id="sendBtn">送信</button>
+  </div>
+
+  <!-- 名前入力欄 -->
+  <div class="inputContainer">
+    <input id="usernameInput" placeholder="名前を入力" />
+    <button id="setNameBtn">OK</button>
   </div>
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   const supabaseUrl = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
-  const supabaseKey = "（ここは省略）"; // ←実際のキーを入れる
+  const supabaseKey = "（ここは省略）"; // ← 実際のキーを入れる
   const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-  const loginDiv = document.getElementById("login");
-  const chatroomDiv = document.getElementById("chatroom");
   const chatDiv = document.getElementById("chat");
-  const enterBtn = document.getElementById("enterBtn");
   const sendBtn = document.getElementById("sendBtn");
+  const setNameBtn = document.getElementById("setNameBtn");
 
-  let username = "";
+  let username = "匿名"; // デフォルト名
 
-  // 名前入力 → チャット画面に切り替え
-  enterBtn.addEventListener("click", () => {
-    username = document.getElementById("usernameInput").value.trim();
-    if (!username) return alert("名前を入力してください");
-
-    loginDiv.style.display = "none";
-    chatroomDiv.style.display = "flex";
-
-    // 入室メッセージ送信
-    supabase.from('Chat').insert([{ username, content: `${username}さんが入室しました` }]);
-
-    // リアルタイム購読
-    supabase
-      .from('Chat')
-      .on('INSERT', payload => {
-        const p = document.createElement('p');
-        p.textContent = `[${payload.new.username}] ${payload.new.content}`;
-        chatDiv.appendChild(p);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-      })
-      .subscribe();
+  // 名前設定
+  setNameBtn.addEventListener("click", () => {
+    const inputName = document.getElementById("usernameInput").value.trim();
+    if (inputName) {
+      username = inputName;
+      alert(`名前が「${username}」に設定されました`);
+    } else {
+      alert("名前を入力してください");
+    }
   });
 
   // メッセージ送信
@@ -121,20 +106,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  sendBtn.addEventListener("click", () => {
-    if (!username) return alert("まず名前を入力してください");
-    sendMessage();
-  });
+  sendBtn.addEventListener("click", sendMessage);
 
-  // ページ離脱時にリセット
-  window.addEventListener('beforeunload', () => {
-    username = "";
-    loginDiv.style.display = "flex";
-    chatroomDiv.style.display = "none";
-  });
-
-  // 初期状態はログイン画面
-  loginDiv.style.display = "flex";
+  // リアルタイム購読
+  supabase
+    .from('Chat')
+    .on('INSERT', payload => {
+      const p = document.createElement('p');
+      p.textContent = `[${payload.new.username}] ${payload.new.content}`;
+      chatDiv.appendChild(p);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    })
+    .subscribe();
 });
 </script>
 
