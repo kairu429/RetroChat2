@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>RetroChat ワールド＆招待コード版</title>
+<link rel="icon" type="image/png" href="RC.png">
 <style>
 body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
 #chatroom { display:flex; width:80vw; max-width:800px; height:80vh; border:1px solid limegreen; background:black;}
@@ -89,7 +90,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    // ユーザー登録
     userKey = roomRef.child("users").push().key;
     roomRef.child("users/"+userKey).set(username);
 
@@ -97,7 +97,6 @@ document.addEventListener("DOMContentLoaded", () => {
       roomRef.child("users/"+userKey).remove();
     });
 
-    // チャット受信
     roomRef.child("chat").on("child_added", snapshot=>{
       const data = snapshot.val();
       const p = document.createElement('p');
@@ -119,7 +118,6 @@ document.addEventListener("DOMContentLoaded", () => {
       chatDiv.scrollTop = chatDiv.scrollHeight;
     });
 
-    // ユーザーリスト更新＆空チェック
     roomRef.child("users").on("value", snapshot=>{
       userListDiv.innerHTML="";
       snapshot.forEach(s=>{
@@ -129,7 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
         userListDiv.appendChild(p);
       });
 
-      // 招待ルームが空になったらチャットごと削除
       if(!isWorld && snapshot.numChildren() === 0){
         roomRef.remove();
       }
@@ -155,7 +152,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if(code) joinRoom(code);
   });
 
-  // 全世界のチャットも1か月以上経ったら削除
   setInterval(()=>{
     db.ref("rooms").once("value", snapshot=>{
       snapshot.forEach(room=>{
