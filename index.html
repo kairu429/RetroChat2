@@ -55,19 +55,15 @@ button:hover { background:#111;}
       <input id="msgInput" placeholder="メッセージまたは画像URLを入力" />
       <button id="sendBtn">送信</button>
     </div>
-    <div class="inputContainer" style="margin-top:0;">
-      <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
-      <button id="setNameBtn">決定</button>
-    </div>
   </div>
 </div>
 
 <div id="menu">
   <h2>どこに行きますか？</h2>
-  <input id="preNameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
+  <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
   <button class="menuBtn" id="worldBtn">全世界</button>
-  <button class="menuBtn" id="joinBtn">招待</button>
-  <button class="menuBtn" id="createBtn">新しい招待を作成</button>
+  <button class="menuBtn" id="joinBtn">招待に参加</button>
+  <button class="menuBtn" id="createBtn">招待を作成</button>
 </div>
 
 <script>
@@ -76,64 +72,52 @@ document.addEventListener("DOMContentLoaded", () => {
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
-  let username = "匿名";
+  let username = null;
   let roomID = null;
   let userKey = null;
   let isWorld = false;
-  let currentOwner = null;
 
   const menu = document.getElementById("menu");
   const chatroom = document.getElementById("chatroom");
   const chatDiv = document.getElementById("chat");
   const msgInput = document.getElementById("msgInput");
   const sendBtn = document.getElementById("sendBtn");
-  const setNameBtn = document.getElementById("setNameBtn");
   const usernameInput = document.getElementById("usernameInput");
-  const preNameInput = document.getElementById("preNameInput");
   const userListDiv = document.getElementById("userList");
 
-  // 古いチャットを削除（1か月以上前）
-  function cleanupOldMessages(roomKey){
-    const cutoff = Date.now() - (30*24*60*60*1000);
-    db.ref("rooms/"+roomKey+"/chat").once("value", snap=>{
-      snap.forEach(msg=>{
-        if(msg.val().timestamp < cutoff){
-          msg.ref.remove();
+  function cleanupOldMessages(rid){
+    const cutoff = Date.now() - (30*24*60*60*1000); // 30日
+    db.ref("rooms/"+rid+"/chat").once("value", snap=>{
+      snap.forEach(c=>{
+        if(c.val().timestamp < cutoff){
+          c.ref.remove();
         }
       });
     });
   }
 
-  // 全ルームを毎日チェック
-  setInterval(()=>{
-    db.ref("rooms").once("value", snapshot=>{
-      snapshot.forEach(room=>{
-        cleanupOldMessages(room.key);
-      });
-    });
-  }, 24*60*60*1000);
+  function joinRoom(rid, creating=false){
+    roomID = rid;
+    isWorld = (rid==="world");
 
-  function joinRoom(rid, ownerIfNew=null){
-    if(!username || username==="匿名"){
-      alert("先に名前を設定してください！");
+    username = usernameInput.value.trim();
+    if(!username){
+      alert("名前を入力してください");
       return;
     }
 
-    roomID = rid;
-    isWorld = (rid==="world");
     menu.style.display="none";
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
     roomRef.once("value").then(snap=>{
-      if(!snap.exists() && !isWorld){
+      if(!snap.exists()){
+        // 新規ルーム作成時 → owner 設定
         roomRef.set({
-          owner: ownerIfNew || username,
           createdAt: Date.now(),
-          users:{}
+          owner: isWorld ? null : username
         });
       }
-      currentOwner = snap.val() ? snap.val().owner : (isWorld? null : username);
       registerUser(roomRef);
     });
 
@@ -143,30 +127,36 @@ document.addEventListener("DOMContentLoaded", () => {
       userRef.set(username);
       userRef.onDisconnect().remove();
 
-      window.addEventListener("beforeunload", ()=> userRef.remove());
+      window.addEventListener("beforeunload", ()=>{
+        userRef.remove();
+      });
 
       // チャット受信
       roomRef.child("chat").on("child_added", snapshot=>{
         const data = snapshot.val();
         const p = document.createElement('p');
-        let nameSpan = document.createElement("span");
-        nameSpan.textContent = data.username;
-        if(!isWorld && data.username === currentOwner){
-          nameSpan.className="ownerName";
-        }
-        p.appendChild(document.createTextNode("["));
-        p.appendChild(nameSpan);
-        p.appendChild(document.createTextNode("] "));
-        if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
-          const img = document.createElement("img");
-          img.src = data.content;
-          img.className = "chatImage";
-          p.appendChild(img);
-        } else {
-          p.appendChild(document.createTextNode(data.content));
-        }
-        chatDiv.appendChild(p);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
+
+        roomRef.once("value").then(rSnap=>{
+          const roomData = rSnap.val();
+          let nameSpan = document.createElement("span");
+          nameSpan.textContent = data.username;
+          if(!isWorld && roomData && data.username === roomData.owner){
+            nameSpan.className="ownerName";
+          }
+          p.appendChild(document.createTextNode("["));
+          p.appendChild(nameSpan);
+          p.appendChild(document.createTextNode("] "));
+          if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+            const img = document.createElement("img");
+            img.src = data.content;
+            img.className = "chatImage";
+            p.appendChild(img);
+          } else {
+            p.appendChild(document.createTextNode(data.content));
+          }
+          chatDiv.appendChild(p);
+          chatDiv.scrollTop = chatDiv.scrollHeight;
+        });
       });
 
       // ユーザーリスト更新
@@ -177,11 +167,15 @@ document.addEventListener("DOMContentLoaded", () => {
           Object.entries(val.users).forEach(([key, name])=>{
             const p = document.createElement("div");
             p.textContent = name;
-            if(name === val.owner && !isWorld){
+            if(!isWorld && name === val.owner){
               p.className="ownerName";
             }
             userListDiv.appendChild(p);
           });
+        } else {
+          if(!isWorld){
+            roomRef.remove();
+          }
         }
       });
     }
@@ -190,8 +184,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
-      db.ref("rooms/"+roomID+"/chat").push({ 
-        username, 
+      db.ref("rooms/"+roomID+"/chat").push({
+        username,
         content,
         timestamp: Date.now()
       });
@@ -204,42 +198,26 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.key==="Enter") sendMessage();
   });
 
-  setNameBtn.addEventListener("click", ()=>{
-    const inputName = usernameInput.value.trim();
-    if(inputName){
-      username = inputName.slice(0,20);
-      alert(`名前が「${username}」に設定されました`);
-      if(roomID && userKey){
-        db.ref("rooms/"+roomID+"/users/"+userKey).set(username);
-      }
-    } else {
-      alert("名前を入力してください");
-    }
-  });
-
-  document.getElementById("worldBtn").addEventListener("click", ()=> {
-    if(preNameInput.value.trim()){
-      username = preNameInput.value.trim().slice(0,20);
-      joinRoom("world");
-    } else {
-      alert("名前を入力してください");
-    }
-  });
-
+  document.getElementById("worldBtn").addEventListener("click", ()=> joinRoom("world"));
   document.getElementById("joinBtn").addEventListener("click", ()=>{
-    if(!preNameInput.value.trim()){ alert("名前を入力してください"); return; }
-    username = preNameInput.value.trim().slice(0,20);
     let code = prompt("招待コードを入力");
     if(code) joinRoom(code);
   });
-
   document.getElementById("createBtn").addEventListener("click", ()=>{
-    if(!preNameInput.value.trim()){ alert("名前を入力してください"); return; }
-    username = preNameInput.value.trim().slice(0,20);
     let code = Math.random().toString(36).substring(2,8);
     alert("招待コード: "+code);
-    joinRoom(code, username);
+    joinRoom(code, true);
   });
+
+  // 1日ごとに古いチャット掃除
+  setInterval(()=>{
+    db.ref("rooms").once("value", snap=>{
+      snap.forEach(room=>{
+        cleanupOldMessages(room.key);
+      });
+    });
+  }, 24*60*60*1000);
+
 });
 </script>
 </body>
