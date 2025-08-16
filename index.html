@@ -5,33 +5,10 @@
 <title>RetroChat ワールド＆招待コード版</title>
 <style>
 body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
-#chatroom {
-  display:flex;
-  width:80vw;
-  max-width:800px;
-  height:80vh;
-  border:1px solid limegreen;
-  background:black;
-}
-#userList {
-  width:150px;
-  border-right:1px solid limegreen;
-  padding:5px;
-  overflow-y:auto;
-  font-size:0.8em;
-  background:black;
-}
-#chatContainer {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-}
-#chat {
-  flex:1;
-  border-bottom:1px solid limegreen;
-  padding:5px;
-  overflow-y:auto;
-}
+#chatroom { display:flex; width:80vw; max-width:800px; height:80vh; border:1px solid limegreen; background:black; }
+#userList { width:150px; border-right:1px solid limegreen; padding:5px; overflow-y:auto; font-size:0.8em; background:black; }
+#chatContainer { flex:1; display:flex; flex-direction:column; }
+#chat { flex:1; border-bottom:1px solid limegreen; padding:5px; overflow-y:auto; }
 .inputContainer { display:flex; margin-top:5px; }
 input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1; }
 button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer; }
@@ -55,10 +32,6 @@ button:hover { background:#111;}
       <input id="msgInput" placeholder="メッセージまたは画像URLを入力" />
       <button id="sendBtn">送信</button>
     </div>
-    <div class="inputContainer" style="margin-top:0;">
-      <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
-      <button id="setNameBtn">決定</button>
-    </div>
   </div>
 </div>
 
@@ -74,7 +47,7 @@ document.addEventListener("DOMContentLoaded", () => {
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
-  let username = "匿名";
+  let username = "";
   let roomID = null;
   let userKey = null;
   let isWorld = false;
@@ -84,23 +57,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const chatDiv = document.getElementById("chat");
   const msgInput = document.getElementById("msgInput");
   const sendBtn = document.getElementById("sendBtn");
-  const setNameBtn = document.getElementById("setNameBtn");
-  const usernameInput = document.getElementById("usernameInput");
   const userListDiv = document.getElementById("userList");
 
-  function assignAnonymous(roomRef, callback){
-    roomRef.child("users").once("value").then(snapshot=>{
-      let used = new Set();
-      snapshot.forEach(s=>{ used.add(s.val()); });
-      for(let i=1;i<=99;i++){
-        const name = "匿名"+i;
-        if(!used.has(name)){
-          callback(name);
-          return;
-        }
-      }
-      callback("匿名99");
-    });
+  function promptName(callback){
+    let inputName = prompt("名前を入力してください（20文字以内）", "");
+    if(inputName){
+      username = inputName.slice(0,20);
+      callback();
+    } else {
+      promptName(callback);
+    }
   }
 
   function joinRoom(rid){
@@ -110,25 +76,8 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    // ルーム作成時にcreatedAtを記録
-    roomRef.once("value").then(snap=>{
-      if(!snap.exists()) roomRef.set({createdAt: Date.now()});
-    });
-
-    // ルームが30日以上経過していれば削除
-    roomRef.once("value").then(snap=>{
-      const data = snap.val();
-      if(data.createdAt && (Date.now() - data.createdAt) > 30*24*60*60*1000){
-        roomRef.remove();
-        alert("このルームは古すぎるため削除されました");
-        location.reload();
-        return;
-      }
-    });
-
-    // ユーザー名が匿名なら自動割り当て
-    if(username==="匿名"){
-      assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
+    if(!username) {
+      promptName(()=> registerUser(roomRef));
     } else {
       registerUser(roomRef);
     }
@@ -147,10 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const p = document.createElement('p');
         let nameSpan = document.createElement("span");
         nameSpan.textContent = data.username;
-
-        // ownerはuserKeyで判定
-        if(!isWorld && data.userKey === userKey) nameSpan.className="ownerName";
-
+        if(snapKeyIsMe(snapshot.key)) nameSpan.className="ownerName";
         p.appendChild(document.createTextNode("["));
         p.appendChild(nameSpan);
         p.appendChild(document.createTextNode("] "));
@@ -172,25 +118,21 @@ document.addEventListener("DOMContentLoaded", () => {
         snapshot.forEach(s=>{
           const p = document.createElement("div");
           p.textContent = s.val();
-          if(!isWorld && s.key===userKey) p.className="ownerName";
+          if(s.key===userKey) p.className="ownerName";
           userListDiv.appendChild(p);
         });
-        // ルーム内が空になったら削除
-        if(!snapshot.exists() && !isWorld){
-          roomRef.remove();
-        }
       });
     }
+  }
+
+  function snapKeyIsMe(key){
+    return key===userKey;
   }
 
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
-      db.ref("rooms/"+roomID+"/chat").push({ 
-        username, 
-        userKey, 
-        content 
-      });
+      db.ref("rooms/"+roomID+"/chat").push({ username, content, createdAt: Date.now() });
       msgInput.value="";
     }
   }
@@ -200,33 +142,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.key==="Enter") sendMessage();
   });
 
-  setNameBtn.addEventListener("click", ()=>{
-    const inputName = usernameInput.value.trim();
-    if(inputName){
-      username = inputName.slice(0,20);
-      alert(`名前が「${username}」に設定されました`);
-      if(roomID && userKey){
-        db.ref("rooms/"+roomID+"/users/"+userKey).set(username);
-      }
-    } else {
-      alert("名前を入力してください");
-    }
-  });
-
   document.getElementById("worldBtn").addEventListener("click", ()=> joinRoom("world"));
   document.getElementById("joinBtn").addEventListener("click", ()=>{
     let code = prompt("招待コードを入力");
     if(code) joinRoom(code);
   });
 
-  // 1日ごとに古いルーム削除
+  // 古いメッセージ削除（1か月以上）
+  function cleanupOldMessages(roomKey){
+    const monthAgo = Date.now() - (30*24*60*60*1000);
+    db.ref("rooms/"+roomKey+"/chat").once("value", snapshot=>{
+      snapshot.forEach(msg=>{
+        if(msg.val().createdAt < monthAgo){
+          db.ref("rooms/"+roomKey+"/chat/"+msg.key).remove();
+        }
+      });
+    });
+  }
+
+  // 1日ごとに全ルームの古いメッセージを削除
   setInterval(()=>{
     db.ref("rooms").once("value", snapshot=>{
       snapshot.forEach(room=>{
-        const roomData = room.val();
-        if(roomData.createdAt && (Date.now() - roomData.createdAt) > 30*24*60*60*1000){
-          db.ref("rooms/"+room.key).remove();
-        }
+        cleanupOldMessages(room.key);
       });
     });
   }, 24*60*60*1000);
