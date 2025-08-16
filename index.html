@@ -5,33 +5,10 @@
 <title>RetroChat ワールド＆招待コード版</title>
 <style>
 body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
-#chatroom {
-  display:flex;
-  width:80vw;
-  max-width:800px;
-  height:80vh;
-  border:1px solid limegreen;
-  background:black;
-}
-#userList {
-  width:150px;
-  border-right:1px solid limegreen;
-  padding:5px;
-  overflow-y:auto;
-  font-size:0.8em;
-  background:black;
-}
-#chatContainer {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-}
-#chat {
-  flex:1;
-  border-bottom:1px solid limegreen;
-  padding:5px;
-  overflow-y:auto;
-}
+#chatroom { display:flex; width:80vw; max-width:800px; height:80vh; border:1px solid limegreen; background:black;}
+#userList { width:150px; border-right:1px solid limegreen; padding:5px; overflow-y:auto; font-size:0.8em; background:black;}
+#chatContainer { flex:1; display:flex; flex-direction:column;}
+#chat { flex:1; border-bottom:1px solid limegreen; padding:5px; overflow-y:auto;}
 .inputContainer { display:flex; margin-top:5px; }
 input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1; }
 button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer; }
@@ -59,11 +36,17 @@ button:hover { background:#111;}
 </div>
 
 <div id="menu">
+  <h2>名前を入力してください（20文字以内）</h2>
+  <div class="inputContainer">
+    <input id="usernameInput" maxlength="20" placeholder="名前を入力" />
+    <button id="setNameBtn">決定</button>
+  </div>
+</div>
+
+<div id="roomMenu" style="display:none;">
   <h2>どこに行きますか？</h2>
-  <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
   <button class="menuBtn" id="worldBtn">全世界</button>
-  <button class="menuBtn" id="joinBtn">招待に参加</button>
-  <button class="menuBtn" id="createBtn">招待を作成</button>
+  <button class="menuBtn" id="joinBtn">招待</button>
 </div>
 
 <script>
@@ -78,117 +61,85 @@ document.addEventListener("DOMContentLoaded", () => {
   let isWorld = false;
 
   const menu = document.getElementById("menu");
+  const roomMenu = document.getElementById("roomMenu");
   const chatroom = document.getElementById("chatroom");
   const chatDiv = document.getElementById("chat");
   const msgInput = document.getElementById("msgInput");
   const sendBtn = document.getElementById("sendBtn");
+  const setNameBtn = document.getElementById("setNameBtn");
   const usernameInput = document.getElementById("usernameInput");
   const userListDiv = document.getElementById("userList");
 
-  function cleanupOldMessages(rid){
-    const cutoff = Date.now() - (30*24*60*60*1000); // 30日
-    db.ref("rooms/"+rid+"/chat").once("value", snap=>{
-      snap.forEach(c=>{
-        if(c.val().timestamp < cutoff){
-          c.ref.remove();
-        }
-      });
-    });
-  }
+  setNameBtn.addEventListener("click", ()=>{
+    const inputName = usernameInput.value.trim();
+    if(inputName){
+      username = inputName.slice(0,20);
+      alert(`名前が「${username}」に設定されました`);
+      menu.style.display="none";
+      roomMenu.style.display="flex";
+    } else {
+      alert("名前を入力してください");
+    }
+  });
 
-  function joinRoom(rid, creating=false){
+  function joinRoom(rid){
     roomID = rid;
     isWorld = (rid==="world");
-
-    username = usernameInput.value.trim();
-    if(!username){
-      alert("名前を入力してください");
-      return;
-    }
-
-    menu.style.display="none";
+    roomMenu.style.display="none";
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    roomRef.once("value").then(snap=>{
-      if(!snap.exists()){
-        // 新規ルーム作成時 → owner 設定
-        roomRef.set({
-          createdAt: Date.now(),
-          owner: isWorld ? null : username
-        });
-      }
-      registerUser(roomRef);
+    // ユーザー登録
+    userKey = roomRef.child("users").push().key;
+    roomRef.child("users/"+userKey).set(username);
+
+    window.addEventListener("beforeunload", ()=>{
+      roomRef.child("users/"+userKey).remove();
     });
 
-    function registerUser(roomRef){
-      userKey = roomRef.child("users").push().key;
-      const userRef = roomRef.child("users/"+userKey);
-      userRef.set(username);
-      userRef.onDisconnect().remove();
+    // チャット受信
+    roomRef.child("chat").on("child_added", snapshot=>{
+      const data = snapshot.val();
+      const p = document.createElement('p');
+      let nameSpan = document.createElement("span");
+      nameSpan.textContent = data.username;
+      if(!isWorld && data.username===username) nameSpan.className="ownerName";
+      p.appendChild(document.createTextNode("["));
+      p.appendChild(nameSpan);
+      p.appendChild(document.createTextNode("] "));
+      if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+        const img = document.createElement("img");
+        img.src = data.content;
+        img.className = "chatImage";
+        p.appendChild(img);
+      } else {
+        p.appendChild(document.createTextNode(data.content));
+      }
+      chatDiv.appendChild(p);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    });
 
-      window.addEventListener("beforeunload", ()=>{
-        userRef.remove();
+    // ユーザーリスト更新＆空チェック
+    roomRef.child("users").on("value", snapshot=>{
+      userListDiv.innerHTML="";
+      snapshot.forEach(s=>{
+        const p = document.createElement("div");
+        p.textContent = s.val();
+        if(!isWorld && s.key===userKey) p.className="ownerName";
+        userListDiv.appendChild(p);
       });
 
-      // チャット受信
-      roomRef.child("chat").on("child_added", snapshot=>{
-        const data = snapshot.val();
-        const p = document.createElement('p');
-
-        roomRef.once("value").then(rSnap=>{
-          const roomData = rSnap.val();
-          let nameSpan = document.createElement("span");
-          nameSpan.textContent = data.username;
-          if(!isWorld && roomData && data.username === roomData.owner){
-            nameSpan.className="ownerName";
-          }
-          p.appendChild(document.createTextNode("["));
-          p.appendChild(nameSpan);
-          p.appendChild(document.createTextNode("] "));
-          if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
-            const img = document.createElement("img");
-            img.src = data.content;
-            img.className = "chatImage";
-            p.appendChild(img);
-          } else {
-            p.appendChild(document.createTextNode(data.content));
-          }
-          chatDiv.appendChild(p);
-          chatDiv.scrollTop = chatDiv.scrollHeight;
-        });
-      });
-
-      // ユーザーリスト更新
-      roomRef.on("value", snap=>{
-        const val = snap.val();
-        userListDiv.innerHTML="";
-        if(val && val.users){
-          Object.entries(val.users).forEach(([key, name])=>{
-            const p = document.createElement("div");
-            p.textContent = name;
-            if(!isWorld && name === val.owner){
-              p.className="ownerName";
-            }
-            userListDiv.appendChild(p);
-          });
-        } else {
-          if(!isWorld){
-            roomRef.remove();
-          }
-        }
-      });
-    }
+      // 招待ルームが空になったらチャットごと削除
+      if(!isWorld && snapshot.numChildren() === 0){
+        roomRef.remove();
+      }
+    });
   }
 
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
-      db.ref("rooms/"+roomID+"/chat").push({
-        username,
-        content,
-        timestamp: Date.now()
-      });
+      db.ref("rooms/"+roomID+"/chat").push({ username, content, timestamp:Date.now() });
       msgInput.value="";
     }
   }
@@ -203,17 +154,21 @@ document.addEventListener("DOMContentLoaded", () => {
     let code = prompt("招待コードを入力");
     if(code) joinRoom(code);
   });
-  document.getElementById("createBtn").addEventListener("click", ()=>{
-    let code = Math.random().toString(36).substring(2,8);
-    alert("招待コード: "+code);
-    joinRoom(code, true);
-  });
 
-  // 1日ごとに古いチャット掃除
+  // 全世界のチャットも1か月以上経ったら削除
   setInterval(()=>{
-    db.ref("rooms").once("value", snap=>{
-      snap.forEach(room=>{
-        cleanupOldMessages(room.key);
+    db.ref("rooms").once("value", snapshot=>{
+      snapshot.forEach(room=>{
+        if(room.key === "world"){
+          const chatRef = db.ref("rooms/world/chat");
+          chatRef.once("value").then(snap=>{
+            snap.forEach(msg=>{
+              if(Date.now() - msg.val().timestamp > 30*24*60*60*1000){
+                msg.ref.remove();
+              }
+            });
+          });
+        }
       });
     });
   }, 24*60*60*1000);
