@@ -78,7 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let roomID = null;
   let userKey = null;
   let isWorld = false;
-  const ONE_MONTH_MS = 30*24*60*60*1000; // 30日をミリ秒に変換
 
   const menu = document.getElementById("menu");
   const chatroom = document.getElementById("chatroom");
@@ -111,29 +110,28 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    // ルームの作成日時を確認して1か月以上なら削除
-    roomRef.once("value").then(snapshot=>{
-      const roomData = snapshot.val() || {};
-      const now = Date.now();
+    // ルーム作成時にcreatedAtを記録
+    roomRef.once("value").then(snap=>{
+      if(!snap.exists()) roomRef.set({createdAt: Date.now()});
+    });
 
-      if(!roomData.createdAt){
-        // 新規ルームなら作成日時を設定
-        roomRef.child("createdAt").set(now);
-      } else if(now - roomData.createdAt > ONE_MONTH_MS){
-        // 1か月以上経過していたら削除して再読み込み
+    // ルームが30日以上経過していれば削除
+    roomRef.once("value").then(snap=>{
+      const data = snap.val();
+      if(data.createdAt && (Date.now() - data.createdAt) > 30*24*60*60*1000){
         roomRef.remove();
-        alert("このルームは1か月以上経過したため削除されました");
+        alert("このルームは古すぎるため削除されました");
         location.reload();
         return;
       }
-
-      // ユーザー登録処理
-      if(username==="匿名"){
-        assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
-      } else {
-        registerUser(roomRef);
-      }
     });
+
+    // ユーザー名が匿名なら自動割り当て
+    if(username==="匿名"){
+      assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
+    } else {
+      registerUser(roomRef);
+    }
 
     function registerUser(roomRef){
       userKey = roomRef.child("users").push().key;
@@ -149,7 +147,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const p = document.createElement('p');
         let nameSpan = document.createElement("span");
         nameSpan.textContent = data.username;
-        if(!isWorld && data.username===username) nameSpan.className="ownerName";
+
+        // ownerはuserKeyで判定
+        if(!isWorld && data.userKey === userKey) nameSpan.className="ownerName";
+
         p.appendChild(document.createTextNode("["));
         p.appendChild(nameSpan);
         p.appendChild(document.createTextNode("] "));
@@ -174,6 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
           if(!isWorld && s.key===userKey) p.className="ownerName";
           userListDiv.appendChild(p);
         });
+        // ルーム内が空になったら削除
         if(!snapshot.exists() && !isWorld){
           roomRef.remove();
         }
@@ -184,7 +186,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
-      db.ref("rooms/"+roomID+"/chat").push({ username, content, timestamp: Date.now() });
+      db.ref("rooms/"+roomID+"/chat").push({ 
+        username, 
+        userKey, 
+        content 
+      });
       msgInput.value="";
     }
   }
@@ -213,14 +219,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if(code) joinRoom(code);
   });
 
-  // 1日ごとに全ルームをチェックして1か月以上経過したものを削除
+  // 1日ごとに古いルーム削除
   setInterval(()=>{
-    const now = Date.now();
     db.ref("rooms").once("value", snapshot=>{
       snapshot.forEach(room=>{
         const roomData = room.val();
-        if(roomData.createdAt && now - roomData.createdAt > ONE_MONTH_MS){
-          room.ref.remove();
+        if(roomData.createdAt && (Date.now() - roomData.createdAt) > 30*24*60*60*1000){
+          db.ref("rooms/"+room.key).remove();
         }
       });
     });
