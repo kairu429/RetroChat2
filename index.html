@@ -13,7 +13,7 @@ button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; co
 button:hover { background:#111;}
 .chatImage { max-width:200px; max-height:150px; border:2px solid limegreen; margin:5px 0; display:block; image-rendering: pixelated; transition: transform 0.2s;}
 .chatImage:hover { transform:scale(1.1);}
-#userList { position:absolute; bottom:5px; right:5px; border:1px solid limegreen; padding:5px; max-height:150px; overflow-y:auto; background:black; font-size:0.8em;}
+#userList { position:absolute; top:5px; left:5px; border:1px solid limegreen; padding:5px; max-height:150px; overflow-y:auto; background:black; font-size:0.8em;}
 #menu { display:flex; flex-direction:column; align-items:center;}
 .menuBtn { padding:10px 20px; margin:5px; background:black; color:limegreen; border:1px solid limegreen; cursor:pointer;}
 .menuBtn:hover { background:#111;}
@@ -75,6 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
     userKey = roomRef.child("users").push().key;
     roomRef.child("users/"+userKey).set(username);
 
+    // ページ閉じたとき削除
     window.addEventListener("beforeunload", ()=>{
       roomRef.child("users/"+userKey).remove();
     });
@@ -127,11 +128,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.key==="Enter") sendMessage();
   });
 
+  // 名前決定＆リアルタイム更新
   setNameBtn.addEventListener("click", ()=>{
     const inputName = usernameInput.value.trim();
     if(inputName){
       username = inputName.slice(0,20);
       alert(`名前が「${username}」に設定されました`);
+      // DB 上の自分の名前も更新
+      if(roomID && userKey){
+        db.ref("rooms/"+roomID+"/users/"+userKey).set(username);
+      }
     } else {
       alert("名前を入力してください");
     }
