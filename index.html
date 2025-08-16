@@ -1,3 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>RetroChat ワールド＆招待コード版</title>
+<link rel="icon" type="image/png" href="RC.png">
+<style>
+body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
+#chatroom { display:flex; width:80vw; max-width:800px; height:80vh; border:1px solid limegreen; background:black;}
+#userList { width:150px; border-right:1px solid limegreen; padding:5px; overflow-y:auto; font-size:0.8em; background:black;}
+#chatContainer { flex:1; display:flex; flex-direction:column;}
+#chat { flex:1; border-bottom:1px solid limegreen; padding:5px; overflow-y:auto;}
+.inputContainer { display:flex; margin-top:5px; }
+input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1; }
+button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer; }
+button:hover { background:#111;}
+.chatImage { max-width:200px; max-height:150px; border:2px solid limegreen; margin:5px 0; display:block; image-rendering: pixelated; transition: transform 0.2s;}
+.chatImage:hover { transform:scale(1.1);}
+.ownerName { color: yellow; font-weight: bold; }
+#menu { display:flex; flex-direction:column; align-items:center;}
+.menuBtn { padding:10px 20px; margin:5px; background:black; color:limegreen; border:1px solid limegreen; cursor:pointer;}
+.menuBtn:hover { background:#111;}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+</head>
+<body>
+<div id="chatroom" style="display:none;">
+  <div id="userList"></div>
+  <div id="chatContainer">
+    <div id="chat"></div>
+    <div class="inputContainer">
+      <input id="msgInput" placeholder="メッセージまたは画像URLを入力" />
+      <button id="sendBtn">送信</button>
+    </div>
+  </div>
+</div>
+
+<div id="menu">
+  <h2>名前を入力してください（20文字以内）</h2>
+  <div class="inputContainer">
+    <input id="usernameInput" maxlength="20" placeholder="名前を入力" />
+    <button id="setNameBtn">決定</button>
+  </div>
+</div>
+
+<div id="roomMenu" style="display:none;">
+  <h2>どこに行きますか？</h2>
+  <button class="menuBtn" id="worldBtn">全世界</button>
+  <button class="menuBtn" id="joinBtn">招待</button>
+</div>
+
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   const firebaseConfig = { databaseURL:"https://retrochat-74f95-default-rtdb.firebaseio.com/" };
@@ -38,6 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
+    // ユーザー追加
     userKey = roomRef.child("users").push().key;
     roomRef.child("users/"+userKey).set(username);
 
@@ -45,29 +98,22 @@ document.addEventListener("DOMContentLoaded", () => {
       roomRef.child("users/"+userKey).remove();
     });
 
-    // --- チャットリアルタイム更新 ---
-    roomRef.child("chat").on("child_added", snapshot=>{
-      const data = snapshot.val();
-      const p = document.createElement('p');
-      let nameSpan = document.createElement("span");
-      nameSpan.textContent = data.username;
-      if(!isWorld && data.username===username) nameSpan.className="ownerName";
-      p.appendChild(document.createTextNode("["));
-      p.appendChild(nameSpan);
-      p.appendChild(document.createTextNode("] "));
-      if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
-        const img = document.createElement("img");
-        img.src = data.content;
-        img.className = "chatImage";
-        p.appendChild(img);
-      } else {
-        p.appendChild(document.createTextNode(data.content));
-      }
-      chatDiv.appendChild(p);
-      chatDiv.scrollTop = chatDiv.scrollHeight;
+    // メッセージ追加・更新・削除を監視
+    roomRef.child("chat").on("child_added", snapshot => addOrUpdateMessage(snapshot.key, snapshot.val()));
+    roomRef.child("chat").on("child_changed", snapshot => addOrUpdateMessage(snapshot.key, snapshot.val()));
+    roomRef.child("chat").on("child_removed", snapshot => {
+      const p = document.getElementById("msg-"+snapshot.key);
+      if(p) p.remove();
     });
 
-    // --- ユーザーリストもリアルタイム更新 ---
+    // 過去のメッセージを初期表示
+    roomRef.child("chat").once("value", snapshot=>{
+      snapshot.forEach(snap=>{
+        addOrUpdateMessage(snap.key, snap.val());
+      });
+    });
+
+    // ユーザーリスト更新
     roomRef.child("users").on("value", snapshot=>{
       userListDiv.innerHTML="";
       snapshot.forEach(s=>{
@@ -76,7 +122,26 @@ document.addEventListener("DOMContentLoaded", () => {
         if(!isWorld && s.key===userKey) p.className="ownerName";
         userListDiv.appendChild(p);
       });
+      if(!isWorld && snapshot.numChildren() === 0){
+        roomRef.remove();
+      }
     });
+  }
+
+  function addOrUpdateMessage(id, data){
+    let p = document.getElementById("msg-"+id);
+    if(!p){
+      p = document.createElement("p");
+      p.id = "msg-"+id;
+      chatDiv.appendChild(p);
+    }
+    // 画像判定
+    if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+      p.innerHTML = `[<span${!isWorld && data.username===username?' class="ownerName"':''}>${data.username}</span>] <img src="${data.content}" class="chatImage">`;
+    } else {
+      p.innerHTML = `[<span${!isWorld && data.username===username?' class="ownerName"':''}>${data.username}</span>] ${data.content}`;
+    }
+    chatDiv.scrollTop = chatDiv.scrollHeight;
   }
 
   function sendMessage(){
@@ -98,16 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if(code) joinRoom(code);
   });
 
-  // --- 古いメッセージ自動削除（30日以上） ---
-  setInterval(()=>{
-    db.ref("rooms/world/chat").once("value").then(snap=>{
-      snap.forEach(msg=>{
-        if(Date.now() - msg.val().timestamp > 30*24*60*60*1000){
-          msg.ref.remove();
-        }
-      });
-    });
-  }, 24*60*60*1000);
-
 });
 </script>
+</body>
+</html>
