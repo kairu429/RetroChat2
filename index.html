@@ -21,7 +21,7 @@ body {
   max-width:600px; 
   height:80vh; 
 }
-#login { align-items:center; }
+#login { align-items:center; justify-content:center; }
 #chatroom { display:flex; flex-direction:column; }
 #chat { 
   flex:1; 
@@ -30,18 +30,21 @@ body {
   overflow-y:auto; 
   margin-bottom:5px; 
 }
-#msgInput { 
-  flex:1; 
+input {
   padding:10px; 
   font-size:1em; 
   background:black; 
   color:limegreen; 
   border:1px solid limegreen; 
 }
+input::placeholder {
+  color: limegreen;
+  opacity: 0.7;
+}
 #sendBtn, #enterBtn { 
   padding:10px 20px; 
   font-size:1em; 
-  margin-left:5px; 
+  margin-top:10px; 
   background:black; 
   color:limegreen; 
   border:1px solid white; 
@@ -56,12 +59,14 @@ body {
 </head>
 <body>
 
+<!-- 名前入力画面 -->
 <div id="login">
   <h2>名前を入力してください</h2>
-  <input id="usernameInput" placeholder="名前" style="background:black; color:limegreen; border:1px solid limegreen; padding:10px;">
+  <input id="usernameInput" placeholder="名前" />
   <button id="enterBtn">次へ</button>
 </div>
 
+<!-- チャット画面 -->
 <div id="chatroom">
   <div id="chat"></div>
   <div class="inputContainer">
@@ -73,7 +78,7 @@ body {
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   const supabaseUrl = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
-  const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+  const supabaseKey = "（ここは省略）";
   const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
   const loginDiv = document.getElementById("login");
@@ -84,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let username = "";
 
+  // 名前入力 → チャット画面に切り替え
   enterBtn.addEventListener("click", () => {
     username = document.getElementById("usernameInput").value.trim();
     if (!username) return alert("名前を入力してください");
@@ -91,9 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loginDiv.style.display = "none";
     chatroomDiv.style.display = "flex";
 
-    const msgInput = document.getElementById("msgInput");
-
-    // 入室メッセージ
+    // 入室メッセージ送信
     supabase.from('Chat').insert([{ username, content: `${username}さんが入室しました` }]);
 
     // リアルタイム購読
@@ -108,25 +112,28 @@ document.addEventListener("DOMContentLoaded", () => {
       .subscribe();
   });
 
-  window.sendMessage = function() {
+  // メッセージ送信
+  function sendMessage() {
     const msgInput = document.getElementById("msgInput");
     if (msgInput.value.trim()) {
       supabase.from('Chat').insert([{ username, content: msgInput.value }]);
       msgInput.value = "";
     }
-  };
+  }
 
   sendBtn.addEventListener("click", () => {
     if (!username) return alert("まず名前を入力してください");
     sendMessage();
   });
 
+  // ページ離脱時にリセット
   window.addEventListener('beforeunload', () => {
     username = "";
     loginDiv.style.display = "flex";
     chatroomDiv.style.display = "none";
   });
 
+  // 初期状態はログイン画面
   loginDiv.style.display = "flex";
 });
 </script>
