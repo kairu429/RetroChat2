@@ -20,13 +20,13 @@ body {
  width:80vw; 
  max-width:600px; 
  height:80vh; 
+ border:1px solid limegreen;
 }
 #chat { 
  flex:1; 
  border:1px solid limegreen; 
  padding:5px; 
  overflow-y:auto; 
- margin-bottom:5px; 
 }
 input {
  padding:10px; 
@@ -34,6 +34,7 @@ input {
  background:black; 
  color:limegreen; 
  border:1px solid limegreen;
+ flex:1;
 }
 input::placeholder {
  color: limegreen;
@@ -51,14 +52,13 @@ button {
 button:hover {
  background:#111;
 }
-.inputContainer { display:flex; margin-bottom:10px; }
+.inputContainer { display:flex; margin-top:5px; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body>
 
-<!-- チャット画面 -->
 <div id="chatroom">
  <div id="chat"></div>
 
@@ -70,14 +70,13 @@ button:hover {
 
  <!-- 名前入力欄 -->
  <div class="inputContainer">
-   <input id="usernameInput" placeholder="名前を入力" />
+   <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20" />
    <button id="setNameBtn">OK</button>
  </div>
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
- // Firebase 初期化
  const firebaseConfig = {
    databaseURL: "https://retrochat-74f95-default-rtdb.firebaseio.com/"
  };
@@ -88,13 +87,13 @@ document.addEventListener("DOMContentLoaded", () => {
  const sendBtn = document.getElementById("sendBtn");
  const setNameBtn = document.getElementById("setNameBtn");
 
- let username = "匿名"; // デフォルト名
+ let username = "匿名";
 
  // 名前設定
  setNameBtn.addEventListener("click", () => {
    const inputName = document.getElementById("usernameInput").value.trim();
    if (inputName) {
-     username = inputName;
+     username = inputName.slice(0,20); // 20文字以内
      alert(`名前が「${username}」に設定されました`);
    } else {
      alert("名前を入力してください");
@@ -111,6 +110,11 @@ document.addEventListener("DOMContentLoaded", () => {
  }
 
  sendBtn.addEventListener("click", sendMessage);
+
+ // Enterで送信
+ document.getElementById("msgInput").addEventListener("keydown", (e)=>{
+   if(e.key === "Enter") sendMessage();
+ });
 
  // リアルタイム購読
  db.ref("chat").on("child_added", snapshot => {
