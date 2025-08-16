@@ -101,16 +101,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const msgInput = document.getElementById("msgInput");
   let username = "匿名";
 
+  // 名前設定
   setNameBtn.addEventListener("click", () => {
     const inputName = document.getElementById("usernameInput").value.trim();
     if(inputName){
       username = inputName.slice(0,20);
       alert(`名前が「${username}」に設定されました`);
-    }else{
+    } else {
       alert("名前を入力してください");
     }
   });
 
+  // メッセージ送信
   function sendMessage(content){
     if(content.trim()){
       db.ref("chat").push({ username, content });
@@ -119,24 +121,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   sendBtn.addEventListener("click", ()=> sendMessage(msgInput.value));
-  msgInput.addEventListener("keydown", e=>{if(e.key==="Enter") sendMessage(msgInput.value);});
+  msgInput.addEventListener("keydown", e => {
+    if(e.key === "Enter") sendMessage(msgInput.value);
+  });
 
+  // URL入力ボタン
   urlBtn.addEventListener("click", ()=>{
     const url = prompt("画像URLを入力してください");
     if(url) sendMessage(url);
   });
 
+  // チャット更新
   db.ref("chat").on("child_added", snapshot=>{
     const data = snapshot.val();
-    const p = document.createElement('p');
 
-    // URLなら画像として表示
+    // URLが画像なら img として表示
     if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
       const img = document.createElement("img");
       img.src = data.content;
       img.className = "chatImage";
       chatDiv.appendChild(img);
     } else {
+      const p = document.createElement("p");
       p.textContent = `[${data.username}] ${data.content}`;
       chatDiv.appendChild(p);
     }
