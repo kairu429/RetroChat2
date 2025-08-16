@@ -78,6 +78,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let roomID = null;
   let userKey = null;
   let isWorld = false;
+  const ONE_MONTH_MS = 30*24*60*60*1000; // 30日をミリ秒に変換
 
   const menu = document.getElementById("menu");
   const chatroom = document.getElementById("chatroom");
@@ -110,12 +111,29 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    // ユーザー名が匿名なら被らないよう自動割り当て
-    if(username==="匿名"){
-      assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
-    } else {
-      registerUser(roomRef);
-    }
+    // ルームの作成日時を確認して1か月以上なら削除
+    roomRef.once("value").then(snapshot=>{
+      const roomData = snapshot.val() || {};
+      const now = Date.now();
+
+      if(!roomData.createdAt){
+        // 新規ルームなら作成日時を設定
+        roomRef.child("createdAt").set(now);
+      } else if(now - roomData.createdAt > ONE_MONTH_MS){
+        // 1か月以上経過していたら削除して再読み込み
+        roomRef.remove();
+        alert("このルームは1か月以上経過したため削除されました");
+        location.reload();
+        return;
+      }
+
+      // ユーザー登録処理
+      if(username==="匿名"){
+        assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
+      } else {
+        registerUser(roomRef);
+      }
+    });
 
     function registerUser(roomRef){
       userKey = roomRef.child("users").push().key;
@@ -156,7 +174,6 @@ document.addEventListener("DOMContentLoaded", () => {
           if(!isWorld && s.key===userKey) p.className="ownerName";
           userListDiv.appendChild(p);
         });
-        // ルーム内が空になったら削除
         if(!snapshot.exists() && !isWorld){
           roomRef.remove();
         }
@@ -167,7 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function sendMessage(){
     const content = msgInput.value.trim();
     if(content && roomID){
-      db.ref("rooms/"+roomID+"/chat").push({ username, content });
+      db.ref("rooms/"+roomID+"/chat").push({ username, content, timestamp: Date.now() });
       msgInput.value="";
     }
   }
@@ -195,6 +212,19 @@ document.addEventListener("DOMContentLoaded", () => {
     let code = prompt("招待コードを入力");
     if(code) joinRoom(code);
   });
+
+  // 1日ごとに全ルームをチェックして1か月以上経過したものを削除
+  setInterval(()=>{
+    const now = Date.now();
+    db.ref("rooms").once("value", snapshot=>{
+      snapshot.forEach(room=>{
+        const roomData = room.val();
+        if(roomData.createdAt && now - roomData.createdAt > ONE_MONTH_MS){
+          room.ref.remove();
+        }
+      });
+    });
+  }, 24*60*60*1000);
 
 });
 </script>
