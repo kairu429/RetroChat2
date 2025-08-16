@@ -14,7 +14,7 @@ body { font-family: monospace; margin:0; height:100vh; display:flex; justify-con
   background:black;
 }
 #userList {
-  width:150px; /* 左側固定幅 */
+  width:150px;
   border-right:1px solid limegreen;
   padding:5px;
   overflow-y:auto;
@@ -22,7 +22,7 @@ body { font-family: monospace; margin:0; height:100vh; display:flex; justify-con
   background:black;
 }
 #chatContainer {
-  flex:1; /* 残り幅をチャットに */
+  flex:1;
   display:flex;
   flex-direction:column;
 }
@@ -88,6 +88,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const usernameInput = document.getElementById("usernameInput");
   const userListDiv = document.getElementById("userList");
 
+  function assignAnonymous(roomRef, callback){
+    roomRef.child("users").once("value").then(snapshot=>{
+      let used = new Set();
+      snapshot.forEach(s=>{ used.add(s.val()); });
+      for(let i=1;i<=99;i++){
+        const name = "匿名"+i;
+        if(!used.has(name)){
+          callback(name);
+          return;
+        }
+      }
+      callback("匿名99");
+    });
+  }
+
   function joinRoom(rid){
     roomID = rid;
     isWorld = (rid==="world");
@@ -95,50 +110,58 @@ document.addEventListener("DOMContentLoaded", () => {
     chatroom.style.display="flex";
     const roomRef = db.ref("rooms/"+roomID);
 
-    // ユーザー登録
-    userKey = roomRef.child("users").push().key;
-    roomRef.child("users/"+userKey).set(username);
+    // ユーザー名が匿名なら被らないよう自動割り当て
+    if(username==="匿名"){
+      assignAnonymous(roomRef, name=>{ username=name; registerUser(roomRef); });
+    } else {
+      registerUser(roomRef);
+    }
 
-    // ページ閉じたとき削除
-    window.addEventListener("beforeunload", ()=>{
-      roomRef.child("users/"+userKey).remove();
-    });
+    function registerUser(roomRef){
+      userKey = roomRef.child("users").push().key;
+      roomRef.child("users/"+userKey).set(username);
 
-    // チャット受信
-    roomRef.child("chat").on("child_added", snapshot=>{
-      const data = snapshot.val();
-      if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
-        const img = document.createElement("img");
-        img.src = data.content;
-        img.className = "chatImage";
-        chatDiv.appendChild(img);
-      } else {
-        const p = document.createElement('p');
-        p.textContent = `[${data.username}] ${data.content}`;
-        chatDiv.appendChild(p);
-      }
-      chatDiv.scrollTop = chatDiv.scrollHeight;
-    });
-
-    // ユーザーリスト更新
-    roomRef.child("users").on("value", snapshot=>{
-      userListDiv.innerHTML="";
-      snapshot.forEach(s=>{
-        const p = document.createElement("div");
-        if(!isWorld && s.key===userKey){
-          p.textContent = s.val();
-          p.className = "ownerName"; // ownerは黄色
-        } else {
-          p.textContent = s.val();
-          p.className = "";
-        }
-        userListDiv.appendChild(p);
+      window.addEventListener("beforeunload", ()=>{
+        roomRef.child("users/"+userKey).remove();
       });
-      // ルーム内が空になったら削除
-      if(!snapshot.exists() && !isWorld){
-        roomRef.remove();
-      }
-    });
+
+      // チャット受信
+      roomRef.child("chat").on("child_added", snapshot=>{
+        const data = snapshot.val();
+        const p = document.createElement('p');
+        let nameSpan = document.createElement("span");
+        nameSpan.textContent = data.username;
+        if(!isWorld && data.username===username) nameSpan.className="ownerName";
+        p.appendChild(document.createTextNode("["));
+        p.appendChild(nameSpan);
+        p.appendChild(document.createTextNode("] "));
+        if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+          const img = document.createElement("img");
+          img.src = data.content;
+          img.className = "chatImage";
+          p.appendChild(img);
+        } else {
+          p.appendChild(document.createTextNode(data.content));
+        }
+        chatDiv.appendChild(p);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+      });
+
+      // ユーザーリスト更新
+      roomRef.child("users").on("value", snapshot=>{
+        userListDiv.innerHTML="";
+        snapshot.forEach(s=>{
+          const p = document.createElement("div");
+          p.textContent = s.val();
+          if(!isWorld && s.key===userKey) p.className="ownerName";
+          userListDiv.appendChild(p);
+        });
+        // ルーム内が空になったら削除
+        if(!snapshot.exists() && !isWorld){
+          roomRef.remove();
+        }
+      });
+    }
   }
 
   function sendMessage(){
@@ -154,13 +177,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if(e.key==="Enter") sendMessage();
   });
 
-  // 名前決定＆リアルタイム更新
   setNameBtn.addEventListener("click", ()=>{
     const inputName = usernameInput.value.trim();
     if(inputName){
       username = inputName.slice(0,20);
       alert(`名前が「${username}」に設定されました`);
-      // DB 上の自分の名前も更新
       if(roomID && userKey){
         db.ref("rooms/"+roomID+"/users/"+userKey).set(username);
       }
