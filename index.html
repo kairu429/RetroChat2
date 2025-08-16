@@ -11,8 +11,8 @@ body {
   display:flex; 
   justify-content:center; 
   align-items:center; 
-  background-color: black; 
-  color: limegreen;
+  background-color: black;   /* 背景黒 */
+  color: limegreen;          /* 文字緑 */
 }
 #login, #chatroom { 
   display:none; 
@@ -25,7 +25,7 @@ body {
 #chatroom { display:flex; flex-direction:column; }
 #chat { 
   flex:1; 
-  border:1px solid limegreen; 
+  border:1px solid limegreen;  /* 枠も緑 */
   padding:5px; 
   overflow-y:auto; 
   margin-bottom:5px; 
@@ -33,9 +33,9 @@ body {
 input {
   padding:10px; 
   font-size:1em; 
-  background:black; 
-  color:limegreen; 
-  border:1px solid limegreen; 
+  background:black;         /* 入力欄黒 */
+  color:limegreen;          /* 入力文字緑 */
+  border:1px solid limegreen;
 }
 input::placeholder {
   color: limegreen;
@@ -45,13 +45,13 @@ input::placeholder {
   padding:10px 20px; 
   font-size:1em; 
   margin-top:10px; 
-  background:black; 
-  color:limegreen; 
-  border:1px solid white; 
+  background:black;         /* ボタン黒 */
+  color:limegreen;          /* ボタン文字緑 */
+  border:1px solid white;   /* ボタン枠白 */
   cursor:pointer;
 }
 #sendBtn:hover, #enterBtn:hover {
-  background:#111;
+  background:#111;          /* ホバー時ちょっと明るい黒 */
 }
 .inputContainer { display:flex; }
 </style>
@@ -78,7 +78,7 @@ input::placeholder {
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   const supabaseUrl = "https://zwxtdpvxozlsvvqktmxk.supabase.co";
-  const supabaseKey = "（ここは省略）";
+  const supabaseKey = "（ここは省略）"; // ←実際のキーを入れる
   const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
   const loginDiv = document.getElementById("login");
