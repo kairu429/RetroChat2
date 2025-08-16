@@ -2,106 +2,127 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>RetroChat URL画像対応</title>
+<title>RetroChat ワールド＆招待コード版</title>
 <style>
-body {
-  font-family: monospace;
-  margin:0;
-  height:100vh;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  background-color:black;
-  color:limegreen;
-}
-#chatroom {
-  display:flex;
-  flex-direction:column;
-  width:80vw;
-  max-width:600px;
-  height:80vh;
-  border:1px solid limegreen;
-}
-#chat {
-  flex:1;
-  border:1px solid limegreen;
-  padding:5px;
-  overflow-y:auto;
-  background-color:black;
-}
-input {
-  padding:10px;
-  font-size:1em;
-  background:black;
-  color:limegreen;
-  border:1px solid limegreen;
-  flex:1;
-}
-button {
-  padding:10px 20px;
-  font-size:1em;
-  margin-left:5px;
-  background:black;
-  color:limegreen;
-  border:1px solid white;
-  cursor:pointer;
-}
-button:hover {
-  background:#111;
-}
-.inputContainer {
-  display:flex;
-  margin-top:5px;
-}
-.chatImage {
-  max-width:200px;
-  max-height:150px;
-  border:2px solid limegreen;
-  margin:5px 0;
-  display:block;
-  image-rendering: pixelated;
-  transition: transform 0.2s;
-}
-.chatImage:hover {
-  transform:scale(1.1);
-}
+body { font-family: monospace; margin:0; height:100vh; display:flex; justify-content:center; align-items:center; background-color:black; color:limegreen;}
+#chatroom { display:flex; flex-direction:column; width:80vw; max-width:600px; height:80vh; border:1px solid limegreen; position:relative;}
+#chat { flex:1; border:1px solid limegreen; padding:5px; overflow-y:auto; background-color:black;}
+input { padding:10px; font-size:1em; background:black; color:limegreen; border:1px solid limegreen; flex:1;}
+button { padding:10px 20px; font-size:1em; margin-left:5px; background:black; color:limegreen; border:1px solid white; cursor:pointer;}
+button:hover { background:#111;}
+.inputContainer { display:flex; margin-top:5px;}
+.chatImage { max-width:200px; max-height:150px; border:2px solid limegreen; margin:5px 0; display:block; image-rendering: pixelated; transition: transform 0.2s;}
+.chatImage:hover { transform:scale(1.1);}
+#userList { position:absolute; bottom:5px; right:5px; border:1px solid limegreen; padding:5px; max-height:150px; overflow-y:auto; background:black; font-size:0.8em;}
+#menu { display:flex; flex-direction:column; align-items:center;}
+.menuBtn { padding:10px 20px; margin:5px; background:black; color:limegreen; border:1px solid limegreen; cursor:pointer;}
+.menuBtn:hover { background:#111;}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body>
-
-<div id="chatroom">
+<div id="chatroom" style="display:none;">
   <div id="chat"></div>
-
   <div class="inputContainer">
     <input id="msgInput" placeholder="メッセージまたは画像URLを入力" />
     <button id="sendBtn">送信</button>
   </div>
-
   <div class="inputContainer">
-    <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20" />
+    <input id="usernameInput" placeholder="名前を入力（20文字以内）" maxlength="20"/>
     <button id="setNameBtn">OK</button>
   </div>
+  <div id="userList"></div>
+</div>
+
+<div id="menu">
+  <h2>どこに行きますか？</h2>
+  <button class="menuBtn" id="worldBtn">全世界</button>
+  <button class="menuBtn" id="joinBtn">招待</button>
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-  const firebaseConfig = {
-    databaseURL: "https://retrochat-74f95-default-rtdb.firebaseio.com/"
-  };
+  const firebaseConfig = { databaseURL:"https://retrochat-74f95-default-rtdb.firebaseio.com/" };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
 
+  let username = "匿名";
+  let roomID = null;
+  let userKey = null;
+
+  const menu = document.getElementById("menu");
+  const chatroom = document.getElementById("chatroom");
   const chatDiv = document.getElementById("chat");
+  const msgInput = document.getElementById("msgInput");
   const sendBtn = document.getElementById("sendBtn");
   const setNameBtn = document.getElementById("setNameBtn");
-  const msgInput = document.getElementById("msgInput");
-  let username = "匿名";
+  const usernameInput = document.getElementById("usernameInput");
+  const userListDiv = document.getElementById("userList");
+
+  function joinRoom(rid){
+    roomID = rid;
+    menu.style.display="none";
+    chatroom.style.display="flex";
+    const roomRef = db.ref("rooms/"+roomID);
+
+    // ユーザー登録
+    userKey = roomRef.child("users").push().key;
+    roomRef.child("users/"+userKey).set(username);
+
+    // ブラウザ閉じた時に自動削除
+    window.addEventListener("beforeunload", ()=>{
+      roomRef.child("users/"+userKey).remove();
+    });
+
+    // チャット受信
+    roomRef.child("chat").on("child_added", snapshot=>{
+      const data = snapshot.val();
+      if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+        const img = document.createElement("img");
+        img.src = data.content;
+        img.className = "chatImage";
+        chatDiv.appendChild(img);
+      } else {
+        const p = document.createElement('p');
+        p.textContent = `[${data.username}] ${data.content}`;
+        chatDiv.appendChild(p);
+      }
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    });
+
+    // ユーザーリスト更新
+    roomRef.child("users").on("value", snapshot=>{
+      userListDiv.innerHTML="";
+      snapshot.forEach(s=>{
+        const p = document.createElement("div");
+        p.textContent = s.val() + (s.key===userKey?" owner":"");
+        userListDiv.appendChild(p);
+      });
+      // ルームが空になったら削除
+      if(!snapshot.exists()){
+        roomRef.remove();
+      }
+    });
+  }
+
+  // メッセージ送信
+  function sendMessage(){
+    const content = msgInput.value.trim();
+    if(content && roomID){
+      db.ref("rooms/"+roomID+"/chat").push({ username, content });
+      msgInput.value="";
+    }
+  }
+
+  sendBtn.addEventListener("click", sendMessage);
+  msgInput.addEventListener("keydown", e=>{
+    if(e.key==="Enter") sendMessage();
+  });
 
   // 名前設定
-  setNameBtn.addEventListener("click", () => {
-    const inputName = document.getElementById("usernameInput").value.trim();
+  setNameBtn.addEventListener("click", ()=>{
+    const inputName = usernameInput.value.trim();
     if(inputName){
       username = inputName.slice(0,20);
       alert(`名前が「${username}」に設定されました`);
@@ -110,38 +131,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // メッセージ送信
-  function sendMessage(content){
-    if(content.trim()){
-      db.ref("chat").push({ username, content });
-      msgInput.value="";
-    }
-  }
-
-  sendBtn.addEventListener("click", ()=> sendMessage(msgInput.value));
-  msgInput.addEventListener("keydown", e => {
-    if(e.key === "Enter") sendMessage(msgInput.value);
+  // メニュー操作
+  document.getElementById("worldBtn").addEventListener("click", ()=>{
+    joinRoom("world");
   });
 
-  // チャット更新
-  db.ref("chat").on("child_added", snapshot=>{
-    const data = snapshot.val();
-
-    // URLが画像なら img として表示
-    if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
-      const img = document.createElement("img");
-      img.src = data.content;
-      img.className = "chatImage";
-      chatDiv.appendChild(img);
-    } else {
-      const p = document.createElement('p');
-      p.textContent = `[${data.username}] ${data.content}`;
-      chatDiv.appendChild(p);
-    }
-    chatDiv.scrollTop = chatDiv.scrollHeight;
+  document.getElementById("joinBtn").addEventListener("click", ()=>{
+    let code = prompt("招待コードを入力");
+    if(code) joinRoom(code);
   });
+
 });
 </script>
-
 </body>
 </html>
