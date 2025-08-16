@@ -1,76 +1,73 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RetroChat</title>
-  <style>
-    body {
-      font-family: monospace;
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: black;
-      color: limegreen;
-    }
-    #chatroom {
-      display: flex;
-      flex-direction: column;
-      width: 80vw;
-      max-width: 600px;
-      height: 80vh;
-      border: 1px solid limegreen;
-    }
-    #chat {
-      flex: 1;
-      border: 1px solid limegreen;
-      padding: 5px;
-      overflow-y: auto;
-      background-color: black;
-    }
-    input {
-      padding: 10px;
-      font-size: 1em;
-      background: black;
-      color: limegreen;
-      border: 1px solid limegreen;
-      flex: 1;
-    }
-    input::placeholder {
-      color: limegreen;
-      opacity: 0.7;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 1em;
-      margin-left: 5px;
-      background: black;
-      color: limegreen;
-      border: 1px solid white;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #111;
-    }
-    .inputContainer {
-      display: flex;
-      margin-top: 5px;
-    }
-    .chatImage {
-      max-width: 200px;
-      max-height: 150px;
-      border: 2px solid limegreen;
-      margin: 5px 0;
-      display: block;
-      image-rendering: pixelated;
-      transition: transform 0.2s;
-    }
-    .chatImage:hover {
-      transform: scale(1.1);
-    }
-  </style>
+<meta charset="UTF-8">
+<title>RetroChat URL画像対応</title>
+<style>
+body {
+  font-family: monospace;
+  margin:0;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background-color:black;
+  color:limegreen;
+}
+#chatroom {
+  display:flex;
+  flex-direction:column;
+  width:80vw;
+  max-width:600px;
+  height:80vh;
+  border:1px solid limegreen;
+}
+#chat {
+  flex:1;
+  border:1px solid limegreen;
+  padding:5px;
+  overflow-y:auto;
+  background-color:black;
+}
+input {
+  padding:10px;
+  font-size:1em;
+  background:black;
+  color:limegreen;
+  border:1px solid limegreen;
+  flex:1;
+}
+button {
+  padding:10px 20px;
+  font-size:1em;
+  margin-left:5px;
+  background:black;
+  color:limegreen;
+  border:1px solid white;
+  cursor:pointer;
+}
+button:hover {
+  background:#111;
+}
+.inputContainer {
+  display:flex;
+  margin-top:5px;
+}
+.chatImage {
+  max-width:200px;
+  max-height:150px;
+  border:2px solid limegreen;
+  margin:5px 0;
+  display:block;
+  image-rendering: pixelated;
+  transition: transform 0.2s;
+}
+.chatImage:hover {
+  transform:scale(1.1);
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
 </head>
 <body>
 
@@ -78,10 +75,9 @@
   <div id="chat"></div>
 
   <div class="inputContainer">
-    <input id="msgInput" placeholder="メッセージを入力" />
+    <input id="msgInput" placeholder="メッセージか画像URLを入力" />
     <button id="sendBtn">送信</button>
-    <button id="imgBtn">＋</button>
-    <input type="file" id="imgInput" accept="image/*" style="display:none"/>
+    <button id="urlBtn">＋</button>
   </div>
 
   <div class="inputContainer">
@@ -90,101 +86,63 @@
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-storage-compat.js"></script>
 <script>
-  document.addEventListener("DOMContentLoaded", () => {
-    // Firebase 初期化
-    const firebaseConfig = {
-      databaseURL: "https://retrochat-74f95-default-rtdb.firebaseio.com/"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const storage = firebase.storage();
+document.addEventListener("DOMContentLoaded", () => {
+  const firebaseConfig = {
+    databaseURL: "https://retrochat-74f95-default-rtdb.firebaseio.com/"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
 
-    const chatDiv = document.getElementById("chat");
-    const sendBtn = document.getElementById("sendBtn");
-    const setNameBtn = document.getElementById("setNameBtn");
-    const imgInput = document.getElementById("imgInput");
-    const imgBtn = document.getElementById("imgBtn");
-    let username = "匿名";
+  const chatDiv = document.getElementById("chat");
+  const sendBtn = document.getElementById("sendBtn");
+  const setNameBtn = document.getElementById("setNameBtn");
+  const urlBtn = document.getElementById("urlBtn");
+  const msgInput = document.getElementById("msgInput");
+  let username = "匿名";
 
-    // 名前設定
-    setNameBtn.addEventListener("click", () => {
-      const inputName = document.getElementById("usernameInput").value.trim();
-      if (inputName) {
-        username = inputName.slice(0, 20);
-        alert(`名前が「${username}」に設定されました`);
-      } else {
-        alert("名前を入力してください");
-      }
-    });
-
-    // メッセージ送信
-    function sendMessage() {
-      const msgInput = document.getElementById("msgInput");
-      if (msgInput.value.trim()) {
-        db.ref("chat").push({ username, content: msgInput.value });
-        msgInput.value = "";
-      }
+  setNameBtn.addEventListener("click", () => {
+    const inputName = document.getElementById("usernameInput").value.trim();
+    if(inputName){
+      username = inputName.slice(0,20);
+      alert(`名前が「${username}」に設定されました`);
+    }else{
+      alert("名前を入力してください");
     }
-
-    sendBtn.addEventListener("click", sendMessage);
-    document.getElementById("msgInput").addEventListener("keydown", e => {
-      if (e.key === "Enter") sendMessage();
-    });
-
-    // 画像送信
-    imgBtn.addEventListener("click", () => imgInput.click());
-    imgInput.addEventListener("change", () => sendImage(imgInput.files[0]));
-
-    function sendImage(file) {
-      if (!file) return;
-      const storageRef = storage.ref('chatImages/' + Date.now() + "_" + file.name);
-      storageRef.put(file).then(() => {
-        storageRef.getDownloadURL().then(url => {
-          db.ref("chat").push({ username, content: "", image: url });
-          imgInput.value = "";
-        }).catch(err => console.error("URL取得失敗:", err));
-      }).catch(err => console.error("アップロード失敗:", err));
-    }
-
-    // ドラッグ＆ドロップ
-    chatDiv.addEventListener("dragover", e => e.preventDefault());
-    chatDiv.addEventListener("drop", e => {
-      e.preventDefault();
-      if (e.dataTransfer.files[0]) sendImage(e.dataTransfer.files[0]);
-    });
-
-    // ペースト
-    document.addEventListener("paste", e => {
-      const items = e.clipboardData.items;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf("image") !== -1) {
-          const file = items[i].getAsFile();
-          sendImage(file);
-        }
-      }
-    });
-
-    // リアルタイム購読
-    db.ref("chat").on("child_added", snapshot => {
-      const data = snapshot.val();
-      if (data.content) {
-        const p = document.createElement('p');
-        p.textContent = `[${data.username}] ${data.content}`;
-        chatDiv.appendChild(p);
-      }
-      if (data.image) {
-        const img = document.createElement("img");
-        img.src = data.image;
-        img.className = "chatImage";
-        chatDiv.appendChild(img);
-      }
-      chatDiv.scrollTop = chatDiv.scrollHeight;
-    });
   });
+
+  function sendMessage(content){
+    if(content.trim()){
+      db.ref("chat").push({ username, content });
+      msgInput.value="";
+    }
+  }
+
+  sendBtn.addEventListener("click", ()=> sendMessage(msgInput.value));
+  msgInput.addEventListener("keydown", e=>{if(e.key==="Enter") sendMessage(msgInput.value);});
+
+  urlBtn.addEventListener("click", ()=>{
+    const url = prompt("画像URLを入力してください");
+    if(url) sendMessage(url);
+  });
+
+  db.ref("chat").on("child_added", snapshot=>{
+    const data = snapshot.val();
+    const p = document.createElement('p');
+
+    // URLなら画像として表示
+    if(data.content.match(/^https?:\/\/.*\.(jpg|jpeg|png|gif)$/i)){
+      const img = document.createElement("img");
+      img.src = data.content;
+      img.className = "chatImage";
+      chatDiv.appendChild(img);
+    } else {
+      p.textContent = `[${data.username}] ${data.content}`;
+      chatDiv.appendChild(p);
+    }
+    chatDiv.scrollTop = chatDiv.scrollHeight;
+  });
+});
 </script>
 
 </body>
